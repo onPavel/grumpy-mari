@@ -3,10 +3,8 @@ import requests
 import folium
 from streamlit_folium import st_folium
 
-# Настройка страницы
 st.set_page_config(page_title="Grumpy Mari | Аллерго-радар", page_icon="😠", layout="wide")
 
-# CSS стили (оставляем наш дизайн Додо)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
@@ -55,47 +53,37 @@ allergens = {
     "olive_pollen": {"name": "Олива", "emoji": "🫒", "desc": "Для южных регионов."}
 }
 
+# Расширенная база городов для покрытия всей России
 cities = {
     "Москва": (55.7512, 37.6184), "Санкт-Петербург": (59.9386, 30.3141),
-    "Сочи": (43.5855, 39.7231), "Калининград": (54.7065, 20.511)
+    "Краснодар": (45.0448, 38.976), "Сочи": (43.5855, 39.7231),
+    "Калининград": (54.7065, 20.511), "Казань": (55.7963, 49.1088),
+    "Екатеринбург": (56.838, 60.5975), "Новосибирск": (55.0084, 82.9357),
+    "Красноярск": (56.0153, 92.8932), "Владивосток": (43.1198, 131.8869)
 }
 
+# --- БЛОК 1: ДЕТАЛЬНАЯ СТАТИСТИКА ПО ГОРОДУ ---
 col1, col2 = st.columns([1, 3])
 with col1:
-    selected_city = st.selectbox("📍 Выберите город:", list(cities.keys()))
+    selected_city = st.selectbox("📍 Детальный прогноз для города:", list(cities.keys()))
     lat, lon = cities[selected_city]
 
 st.markdown("---")
-
 data = fetch_pollen_data(lat, lon)
 
 if data and "current" in data:
     current_data = data["current"]
-    
-    # Ищем максимальное значение пыльцы для окраски зоны на карте
-    max_pollen_value = 0
-    worst_allergen = ""
-    
-    st.markdown(f"### 📊 Активность в городе: {selected_city}")
+    st.markdown(f"### 📊 Активность аллергенов: {selected_city}")
     cols = st.columns(3)
     
     for idx, (key, info) in enumerate(allergens.items()):
         value = current_data.get(key, 0)
-        
-        # Запоминаем худший показатель
-        if value > max_pollen_value:
-            max_pollen_value = value
-            worst_allergen = info['name']
-            
-        if value < 10:
-            css_class, status = "val-low", "Чисто"
-        elif value < 50:
-            css_class, status = "val-med", "Терпимо"
-        else:
-            css_class, status = "val-high", "Опасно!"
+        if value < 10: css_class, status = "val-low", "Чисто"
+        elif value < 50: css_class, status = "val-med", "Терпимо"
+        else: css_class, status = "val-high", "Опасно!"
             
         with cols[idx % 3]:
-            card_html = f"""
+            st.markdown(f"""
             <div class="grumpy-card">
                 <div class="emoji-icon">{info['emoji']}</div>
                 <h3 class="grumpy-title">{info['name']}</h3>
@@ -103,36 +91,48 @@ if data and "current" in data:
                 <div class="grumpy-value {css_class}">{value} <span style="font-size: 14px; color: #aaa;">зерен/м³</span></div>
                 <div style="margin-top: 15px;"><div class="grumpy-btn">{status}</div></div>
             </div>
-            """
-            st.markdown(card_html, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
             
-    # --- БЛОК КАРТЫ ---
-    st.markdown("### 🗺 Радар зон активности")
-    
-    # Определяем цвет зоны в зависимости от максимальной угрозы
-    if max_pollen_value < 10:
-        zone_color = "#00B36B" # Зеленый
-    elif max_pollen_value < 50:
-        zone_color = "#FF6900" # Оранжевый
-    else:
-        zone_color = "#E32636" # Красный
-        
-    # Создаем карту Folium
-    m = folium.Map(location=[lat, lon], zoom_start=10, tiles="CartoDB positron")
-    
-    # Рисуем круг (зону) вокруг города
-    folium.Circle(
-        location=[lat, lon],
-        radius=8000, # Радиус 8 км
-        color=zone_color,
-        fill=True,
-        fill_color=zone_color,
-        fill_opacity=0.4,
-        tooltip=f"Угроза: {worst_allergen} ({max_pollen_value} зерен/м³)"
-    ).add_to(m)
-    
-    # Выводим карту в Streamlit
-    st_folium(m, width=1200, height=400, returned_objects=[])
+# --- БЛОК 2: ГЛОБАЛЬНАЯ КАРТА (ВСЯ РОССИЯ) ---
+st.markdown("---")
+st.markdown("### 🗺 Национальный радар")
+st.caption("Мари сканирует крупные хабы по всей стране. Вы можете двигать и приближать карту.")
 
-else:
-    st.error("Не удалось загрузить данные. Пыльца победила интернет.")
+# Центрируем карту примерно посередине России (район Сибири)
+m = folium.Map(location=[60.0, 90.0], zoom_start=3, tiles="CartoDB positron")
+
+# Спиннер ожидания, пока скрипт собирает данные по всем городам
+with st.spinner('Спутник собирает данные по регионам РФ...'):
+    for city_name, coords in cities.items():
+        city_lat, city_lon = coords
+        city_data = fetch_pollen_data(city_lat, city_lon)
+        
+        if city_data and "current" in city_data:
+            c_data = city_data["current"]
+            
+            # Ищем самый сильный аллерген в этом городе
+            max_val = 0
+            worst_alg = "Чисто"
+            for k, info in allergens.items():
+                val = c_data.get(k, 0)
+                if val >= max_val:
+                    max_val = val
+                    worst_alg = info['name']
+            
+            # Определяем цвет зоны
+            if max_val < 10: zone_color = "#00B36B" # Зеленый
+            elif max_val < 50: zone_color = "#FF6900" # Оранжевый
+            else: zone_color = "#E32636" # Красный
+            
+            # Рисуем огромную зону (радиус 150 км)
+            folium.Circle(
+                location=[city_lat, city_lon],
+                radius=150000, 
+                color=zone_color,
+                fill=True,
+                fill_color=zone_color,
+                fill_opacity=0.4,
+                tooltip=f"<b>{city_name}</b><br>Худший фон: {worst_alg} ({max_val} зерен/м³)"
+            ).add_to(m)
+
+st_folium(m, width="100%", height=500, returned_objects=[])
