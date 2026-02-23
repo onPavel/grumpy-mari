@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import folium
-from streamlit_folium import st_folium
 from streamlit_geolocation import streamlit_geolocation
 
 st.set_page_config(page_title="Grumpy Mari | Аллерго-радар", page_icon="😠", layout="wide")
@@ -149,5 +148,6 @@ with st.spinner('Спутник собирает данные по регион�
                 tooltip=f"<b>{city_name}</b><br>Худший фон: {worst_alg} ({max_val} зерен/м³)"
             ).add_to(m)
 
-st_folium(m, use_container_width=True, height=500, returned_objects=[])
+st.components.v1.html(m.get_root().render(), height=500)
+
 
