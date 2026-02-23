@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import folium
 from streamlit_folium import st_folium
+from streamlit_geolocation import streamlit_geolocation
 
 st.set_page_config(page_title="Grumpy Mari | Аллерго-радар", page_icon="😠", layout="wide")
 
@@ -27,7 +28,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="grumpy-header">😠 Grumpy Mari</div>', unsafe_allow_html=True)
-st.markdown('<div class="grumpy-subtitle">Ваш личный радар аллергенов. Потому что чихать — это не круто.</div>', unsafe_allow_html=True)
+st.markdown('<div class="grumpy-subtitle">Ваш личный радар аллергенов. Потому что чихать — это не круто. Скебоб.</div>', unsafe_allow_html=True)
 
 @st.cache_data(ttl=3600)
 def fetch_pollen_data(lat, lon):
@@ -65,43 +66,26 @@ cities = {
 # --- БЛОК 1: ДЕТАЛЬНАЯ СТАТИСТИКА ПО ГОРОДУ ---
 col1, col2 = st.columns([1, 3])
 with col1:
-    selected_city = st.selectbox("📍 Детальный прогноз для города:", list(cities.keys()))
-    lat, lon = cities[selected_city]
-
-st.markdown("---")
-data = fetch_pollen_data(lat, lon)
-
-if data and "current" in data:
-    current_data = data["current"]
-    st.markdown(f"### 📊 Активность аллергенов: {selected_city}")
-    cols = st.columns(3)
+    st.markdown("**🧭 Где вы находитесь?**")
+    # Кнопка запроса геолокации из браузера
+    geo = streamlit_geolocation()
     
-    for idx, (key, info) in enumerate(allergens.items()):
-        value = current_data.get(key, 0)
-        if value < 10: css_class, status = "val-low", "Чисто"
-        elif value < 50: css_class, status = "val-med", "Терпимо"
-        else: css_class, status = "val-high", "Опасно!"
-            
-        with cols[idx % 3]:
-            st.markdown(f"""
-            <div class="grumpy-card">
-                <div class="emoji-icon">{info['emoji']}</div>
-                <h3 class="grumpy-title">{info['name']}</h3>
-                <p class="grumpy-desc">{info['desc']}</p>
-                <div class="grumpy-value {css_class}">{value} <span style="font-size: 14px; color: #aaa;">зерен/м³</span></div>
-                <div style="margin-top: 15px;"><div class="grumpy-btn">{status}</div></div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-# --- БЛОК 2: ГЛОБАЛЬНАЯ КАРТА (ВСЯ РОССИЯ) ---
+    # Если кнопка нажата и координаты получены:
+    if geo and geo.get('latitude') is not None:
+        lat = geo['latitude']
+        lon = geo['longitude']
+        selected_city = "Ваша гео-позиция"
+        st.success("Радар зафиксировал вас!")
+    # Если кнопка не нажата, показываем стандартный список:
+    else:
+        selected_city = st.selectbox("📍 Выберите город из списка:", list(cities.keys()))
+        lat, lon = cities[selected_city]
 st.markdown("---")
 st.markdown("### 🗺 Национальный радар")
 st.caption("Мари сканирует крупные хабы по всей стране. Вы можете двигать и приближать карту.")
 
-# Центрируем карту примерно посередине России (район Сибири)
 m = folium.Map(location=[60.0, 90.0], zoom_start=3, tiles="CartoDB positron")
 
-# Спиннер ожидания, пока скрипт собирает данные по всем городам
 with st.spinner('Спутник собирает данные по регионам РФ...'):
     for city_name, coords in cities.items():
         city_lat, city_lon = coords
@@ -110,7 +94,6 @@ with st.spinner('Спутник собирает данные по регион�
         if city_data and "current" in city_data:
             c_data = city_data["current"]
             
-            # Ищем самый сильный аллерген в этом городе
             max_val = 0
             worst_alg = "Чисто"
             for k, info in allergens.items():
@@ -119,12 +102,11 @@ with st.spinner('Спутник собирает данные по регион�
                     max_val = val
                     worst_alg = info['name']
             
-            # Определяем цвет зоны
+           
             if max_val < 10: zone_color = "#00B36B" # Зеленый
             elif max_val < 50: zone_color = "#FF6900" # Оранжевый
             else: zone_color = "#E32636" # Красный
             
-            # Рисуем огромную зону (радиус 150 км)
             folium.Circle(
                 location=[city_lat, city_lon],
                 radius=150000, 
@@ -134,5 +116,6 @@ with st.spinner('Спутник собирает данные по регион�
                 fill_opacity=0.4,
                 tooltip=f"<b>{city_name}</b><br>Худший фон: {worst_alg} ({max_val} зерен/м³)"
             ).add_to(m)
+
 
 st_folium(m, width="100%", height=500, returned_objects=[])
