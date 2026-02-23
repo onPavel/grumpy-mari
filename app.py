@@ -149,4 +149,5 @@ with st.spinner('Спутник собирает данные по регион�
                 tooltip=f"<b>{city_name}</b><br>Худший фон: {worst_alg} ({max_val} зерен/м³)"
             ).add_to(m)
 
-st_folium(m, width="100%", height=500, returned_objects=[])
+st_folium(m, use_container_width=True, height=500, returned_objects=[])
+
