@@ -63,7 +63,7 @@ cities = {
     "Красноярск": (56.0153, 92.8932), "Владивосток": (43.1198, 131.8869)
 }
 
-# --- БЛОК 1: ДЕТАЛЬНАЯ СТАТИСТИКА ПО ГОРОДУ ---
+# --- БЛОК 1: ДЕТАЛЬНАЯ СТАТИСТИКА ПО ГОРОДУ И ГЕОЛОКАЦИЯ ---
 col1, col2 = st.columns([1, 3])
 with col1:
     st.markdown("**🧭 Где вы находитесь?**")
@@ -80,6 +80,36 @@ with col1:
     else:
         selected_city = st.selectbox("📍 Выберите город из списка:", list(cities.keys()))
         lat, lon = cities[selected_city]
+
+st.markdown("---")
+data = fetch_pollen_data(lat, lon)
+
+if data and "current" in data:
+    current_data = data["current"]
+    st.markdown(f"### 📊 Активность аллергенов: {selected_city}")
+    cols = st.columns(3)
+    
+    for idx, (key, info) in enumerate(allergens.items()):
+        # Защита от пустых данных (None)
+        value = current_data.get(key)
+        value = 0 if value is None else value
+        
+        if value < 10: css_class, status = "val-low", "Чисто"
+        elif value < 50: css_class, status = "val-med", "Терпимо"
+        else: css_class, status = "val-high", "Опасно!"
+            
+        with cols[idx % 3]:
+            st.markdown(f"""
+            <div class="grumpy-card">
+                <div class="emoji-icon">{info['emoji']}</div>
+                <h3 class="grumpy-title">{info['name']}</h3>
+                <p class="grumpy-desc">{info['desc']}</p>
+                <div class="grumpy-value {css_class}">{value} <span style="font-size: 14px; color: #aaa;">зерен/м³</span></div>
+                <div style="margin-top: 15px;"><div class="grumpy-btn">{status}</div></div>
+            </div>
+            """, unsafe_allow_html=True)
+
+# --- БЛОК 2: ГЛОБАЛЬНАЯ КАРТА (ВСЯ РОССИЯ) ---
 st.markdown("---")
 st.markdown("### 🗺 Национальный радар")
 st.caption("Мари сканирует крупные хабы по всей стране. Вы можете двигать и приближать карту.")
@@ -97,12 +127,14 @@ with st.spinner('Спутник собирает данные по регион�
             max_val = 0
             worst_alg = "Чисто"
             for k, info in allergens.items():
-                val = c_data.get(k, 0)
+                # Защита от пустых данных (None) для карты
+                val = c_data.get(k)
+                val = 0 if val is None else val
+                
                 if val >= max_val:
                     max_val = val
                     worst_alg = info['name']
             
-           
             if max_val < 10: zone_color = "#00B36B" # Зеленый
             elif max_val < 50: zone_color = "#FF6900" # Оранжевый
             else: zone_color = "#E32636" # Красный
@@ -116,6 +148,5 @@ with st.spinner('Спутник собирает данные по регион�
                 fill_opacity=0.4,
                 tooltip=f"<b>{city_name}</b><br>Худший фон: {worst_alg} ({max_val} зерен/м³)"
             ).add_to(m)
-
 
 st_folium(m, width="100%", height=500, returned_objects=[])
